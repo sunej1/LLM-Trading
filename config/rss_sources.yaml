@@ -1,0 +1,69 @@
+# ===================================================================
+# RSS Sources Configuration
+# Lists all RSS feeds the ingestion pipeline should pull from.
+# Each entry includes:
+#   - name: readable identifier
+#   - url: RSS feed link
+#   - category: business/markets/tech/etc.
+#   - credibility: high/medium/low (used for weighting & filtering)
+# ===================================================================
+
+rss_sources:
+
+  # ---------------------------------------------------------------
+  # HIGH CREDIBILITY SOURCES
+  # ---------------------------------------------------------------
+
+
+  - name: yahoo_finance_top
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=yhoo&region=US&lang=en-US"
+    category: finance
+    credibility: high
+
+  - name: reuters_business
+    url: "http://feeds.reuters.com/reuters/businessNews"
+    category: business
+    credibility: high
+
+  - name: reuters_markets
+    url: "http://feeds.reuters.com/reuters/marketsNews"
+    category: markets
+    credibility: high
+
+  - name: reuters_technology
+    url: "http://feeds.reuters.com/reuters/technologyNews"
+    category: technology
+    credibility: high
+
+
+
+  - name: yahoo_finance_trending
+    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US"
+    category: finance
+    credibility: high
+
+
+  # ---------------------------------------------------------------
+  # LOWER CREDIBILITY SOURCES (SOCIAL SIGNALS)
+  # These are not traditional news sources.
+  # Treat them with caution — use mainly for sentiment or early signals.
+  # ---------------------------------------------------------------
+
+  - name: reddit_wsb
+    url: "https://www.reddit.com/r/wallstreetbets/.rss"
+    category: social
+    credibility: low
+
+  - name: reddit_investing
+    url: "https://www.reddit.com/r/investing/.rss"
+    category: social
+    credibility: low
+
+  # Twitter/X does not have a native RSS feed.
+  # This placeholder indicates future streaming integration.
+  #- name: twitter_finance_stream
+  #  url: "stream:twitter/finance"
+  #  category: social
+  #  credibility: low
+  #  note: "Not a real RSS URL — placeholder for future Twitter API ingestion."
+
