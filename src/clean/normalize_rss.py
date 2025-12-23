@@ -1,3 +1,4 @@
+"""Normalize stage: convert raw RSS entries into a uniform schema under data/processed/."""
 from __future__ import annotations
 
 import json
@@ -9,11 +10,13 @@ from typing import Any, Iterable, List
 
 
 def get_project_root() -> Path:
+    """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
     return script_dir.parent.parent
 
 
 def extract_source_from_filename(path: Path) -> str:
+    """Derive source name from raw filename by stripping the final timestamp segment."""
     stem = path.stem  # e.g., reddit_wsb_2025-11-30T22-02-56
     parts = stem.split("_")
     if len(parts) <= 1:
@@ -22,6 +25,7 @@ def extract_source_from_filename(path: Path) -> str:
 
 
 def load_entries(path: Path) -> List[Any] | None:
+    """Load a JSON list from a raw RSS file; return None on failure or unexpected shape."""
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -35,6 +39,7 @@ def load_entries(path: Path) -> List[Any] | None:
 
 
 def parse_timestamp(entry: dict[str, Any]) -> str:
+    """Convert common RSS timestamp fields to UTC ISO string; fallback to empty string."""
     for field in ("published", "updated", "created"):
         raw_value = entry.get(field)
         if not raw_value:
@@ -51,6 +56,7 @@ def parse_timestamp(entry: dict[str, Any]) -> str:
 
 
 def normalize_entry(entry: dict[str, Any], source: str) -> dict[str, Any]:
+    """Map a raw RSS item into the normalized event schema with generated id."""
     headline = entry.get("title") or ""
     text = entry.get("summary") or entry.get("description") or ""
     url = entry.get("link") or ""
@@ -71,6 +77,7 @@ def normalize_entry(entry: dict[str, Any], source: str) -> dict[str, Any]:
 
 
 def normalize_entries(entries: Iterable[dict[str, Any]], source: str) -> List[dict[str, Any]]:
+    """Normalize all valid dict entries for a given source into a list."""
     normalized = []
     for entry in entries:
         if isinstance(entry, dict):
@@ -79,6 +86,7 @@ def normalize_entries(entries: Iterable[dict[str, Any]], source: str) -> List[di
 
 
 def main() -> None:
+    """Load raw RSS dumps, normalize entries, and write normalized_*.json files."""
     project_root = get_project_root()
     raw_dir = project_root / "data" / "raw"
     processed_dir = project_root / "data" / "processed"

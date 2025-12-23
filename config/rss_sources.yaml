@@ -15,31 +15,39 @@ rss_sources:
   # ---------------------------------------------------------------
 
 
-  - name: yahoo_finance_top
-    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=yhoo&region=US&lang=en-US"
-    category: finance
+  - name: ap_news_top
+    url: "https://apnews.com/rss"
+    category: general
     credibility: high
 
-  - name: reuters_business
-    url: "http://feeds.reuters.com/reuters/businessNews"
+  - name: ap_news_business
+    url: "https://apnews.com/hub/business?utm_source=apnews.com&utm_medium=rss"
     category: business
     credibility: high
 
-  - name: reuters_markets
-    url: "http://feeds.reuters.com/reuters/marketsNews"
-    category: markets
+  - name: npr_top
+    url: "https://feeds.npr.org/1001/rss.xml"
+    category: general
     credibility: high
 
-  - name: reuters_technology
-    url: "http://feeds.reuters.com/reuters/technologyNews"
-    category: technology
+  - name: npr_business
+    url: "https://feeds.npr.org/1006/rss.xml"
+    category: business
     credibility: high
 
+  - name: abc_news_top
+    url: "https://abcnews.go.com/abcnews/topstories"
+    category: general
+    credibility: high
 
+  - name: cbs_news_top
+    url: "https://www.cbsnews.com/latest/rss/main"
+    category: general
+    credibility: high
 
-  - name: yahoo_finance_trending
-    url: "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US"
-    category: finance
+  - name: nbc_news_top
+    url: "https://feeds.nbcnews.com/nbcnews/public/news"
+    category: general
     credibility: high
 
 
@@ -49,15 +57,15 @@ rss_sources:
   # Treat them with caution — use mainly for sentiment or early signals.
   # ---------------------------------------------------------------
 
-  - name: reddit_wsb
-    url: "https://www.reddit.com/r/wallstreetbets/.rss"
-    category: social
-    credibility: low
+  #- name: reddit_wsb
+  #  url: "https://www.reddit.com/r/wallstreetbets/.rss"
+  #  category: social
+  #  credibility: low
 
-  - name: reddit_investing
-    url: "https://www.reddit.com/r/investing/.rss"
-    category: social
-    credibility: low
+  #- name: reddit_investing
+  #  url: "https://www.reddit.com/r/investing/.rss"
+  #  category: social
+  #  credibility: low
 
   # Twitter/X does not have a native RSS feed.
   # This placeholder indicates future streaming integration.
@@ -66,4 +74,3 @@ rss_sources:
   #  category: social
   #  credibility: low
   #  note: "Not a real RSS URL — placeholder for future Twitter API ingestion."
-

@@ -1,3 +1,4 @@
+"""Clean stage: sanitize headlines/text for downstream LLM prep and persist cleaned JSON copies."""
 from __future__ import annotations
 
 import html
@@ -8,6 +9,7 @@ from typing import Any, List
 
 
 def get_project_root() -> Path:
+    """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
     return script_dir.parent.parent
 
@@ -18,6 +20,7 @@ REDDIT_LINK_BLOCK_PATTERN = re.compile(r"\[link\].*?\[comments\]", re.IGNORECASE
 
 
 def clean_text(raw: Any, source: str) -> str:
+    """Apply HTML decoding, tag/URL stripping, Reddit boilerplate cleanup, whitespace normalization."""
     if raw is None:
         return ""
 
@@ -45,6 +48,7 @@ def clean_text(raw: Any, source: str) -> str:
 
 
 def load_entries(path: Path) -> List[Any] | None:
+    """Load a JSON list from normalized input; return None on failure or shape mismatch."""
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -58,6 +62,7 @@ def load_entries(path: Path) -> List[Any] | None:
 
 
 def process_file(path: Path, output_dir: Path) -> tuple[int, int, int, bool]:
+    """Clean headline/text fields for one normalized file and write cleaned copy to disk."""
     entries = load_entries(path)
     if entries is None:
         return 0, 0, 0, False
@@ -104,6 +109,7 @@ def process_file(path: Path, output_dir: Path) -> tuple[int, int, int, bool]:
 
 
 def main() -> None:
+    """Iterate normalized files, clean text fields, and write to processed_clean with summaries."""
     project_root = get_project_root()
     processed_dir = project_root / "data" / "processed"
     output_dir = project_root / "data" / "processed_clean"

@@ -1,3 +1,4 @@
+"""Ingest stage: fetch configured RSS feeds and store raw entries into data/raw as JSON."""
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ import yaml
 
 
 def load_config(config_path: Path) -> dict[str, Any] | None:
-    """Load YAML config, returning None on failure."""
+    """Read YAML config of RSS sources; return parsed dict or None on error."""
     if not config_path.exists():
         print(f"Config file not found: {config_path}")
         return None
@@ -25,7 +26,7 @@ def load_config(config_path: Path) -> dict[str, Any] | None:
 
 
 def fetch_feed(url: str, source_name: str) -> bytes | None:
-    """Fetch the RSS feed content via HTTP."""
+    """Download RSS feed content for a source; return raw bytes or None on HTTP failure."""
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
@@ -36,11 +37,12 @@ def fetch_feed(url: str, source_name: str) -> bytes | None:
 
 
 def _json_fallback(obj: Any) -> str:
-    """Fallback serializer to keep raw values that aren't JSON-serializable."""
+    """Serialize otherwise non-JSONable objects by stringifying them."""
     return str(obj)
 
 
 def main() -> None:
+    """Load RSS source config, fetch each feed, and write raw JSON entries to data/raw."""
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent.parent
     config_path = project_root / "config" / "rss_sources.yaml"
