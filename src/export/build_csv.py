@@ -1,4 +1,4 @@
-"""Export stage: combine enriched JSON files and write a consolidated CSV snapshot."""
+"""Export stage: combine enriched JSON files and write a consolidated CSV snapshot with metadata."""
 from __future__ import annotations
 
 import csv
@@ -56,8 +56,47 @@ def choose_ticker(entry: dict[str, Any]) -> str:
     return ""
 
 
-def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[bool, int]:
-    """Write entries to CSV with fixed schema; return success flag and count with non-empty ticker."""
+def ticker_confidence(entry: dict[str, Any]) -> str:
+    """Classify ticker confidence based on available resolution fields."""
+    primary_ticker_val = str(entry.get("primary_ticker") or "").strip()
+    primary_ticker_name_val = str(entry.get("primary_ticker_name") or "").strip()
+    ticker_reason = str(entry.get("ticker_resolution_reason") or "").lower()
+    ticker_version = str(entry.get("ticker_resolution_version") or "").strip()
+    name_reason = str(entry.get("name_ticker_resolution_reason") or "").strip()
+
+    if primary_ticker_val and (("exchange" in ticker_reason) or ("cashtag" in ticker_reason) or ticker_version):
+        return "explicit"
+    if primary_ticker_name_val or name_reason:
+        if name_reason in {"unique_match", "dominant_match"}:
+            return "name_high"
+        return "name_medium"
+    return "unknown"
+
+
+SOURCE_CREDIBILITY_MAP = {
+    "ap_news_": "high",
+    "npr_": "high",
+    "abc_news_": "high",
+    "cbs_news_": "high",
+    "nbc_news_": "high",
+}
+
+
+def source_credibility(entry: dict[str, Any]) -> str:
+    """Resolve source credibility using record field or source prefix mapping."""
+    existing = str(entry.get("source_credibility") or "").strip()
+    if existing:
+        return existing
+
+    source = str(entry.get("source") or "").lower()
+    for prefix, rating in SOURCE_CREDIBILITY_MAP.items():
+        if source.startswith(prefix):
+            return rating
+    return "unknown"
+
+
+def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[bool, int, Dict[str, int]]:
+    """Write entries to CSV with fixed schema; return success flag, count with non-empty ticker, and confidence breakdown."""
     fieldnames = [
         "event_id",
         "timestamp",
@@ -66,6 +105,8 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
         "text",
         "url",
         "ticker",
+        "ticker_confidence",
+        "source_credibility",
         "category",
         "label_severity",
         "label_direction",
@@ -73,6 +114,7 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
     ]
 
     ticker_non_empty = 0
+    confidence_counts: Dict[str, int] = {"explicit": 0, "name_high": 0, "name_medium": 0, "unknown": 0}
 
     try:
         with output_path.open("w", newline="", encoding="utf-8") as f:
@@ -82,6 +124,8 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
                 ticker_value = choose_ticker(entry)
                 if ticker_value:
                     ticker_non_empty += 1
+                confidence_value = ticker_confidence(entry)
+                confidence_counts[confidence_value] = confidence_counts.get(confidence_value, 0) + 1
                 row = {
                     "event_id": entry.get("event_id", ""),
                     "timestamp": entry.get("timestamp", ""),
@@ -90,16 +134,18 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
                     "text": entry.get("text_clean") or entry.get("text", ""),
                     "url": entry.get("url", ""),
                     "ticker": ticker_value,
+                    "ticker_confidence": confidence_value,
+                    "source_credibility": source_credibility(entry),
                     "category": entry.get("category", ""),
                     "label_severity": entry.get("label_severity", ""),
                     "label_direction": entry.get("label_direction", ""),
                     "label_time_horizon": entry.get("label_time_horizon", ""),
                 }
                 writer.writerow(row)
-        return True, ticker_non_empty
+        return True, ticker_non_empty, confidence_counts
     except Exception as exc:
         print(f"Failed to write CSV file {output_path}: {exc}")
-        return False, ticker_non_empty
+        return False, ticker_non_empty, confidence_counts
 
 
 def main() -> None:
@@ -141,12 +187,13 @@ def main() -> None:
     timestamp = datetime.utcnow().isoformat(timespec="seconds").replace(":", "-")
     output_path = combined_dir / f"combined_{timestamp}.csv"
 
-    success, ticker_non_empty = write_csv(deduped_entries, output_path)
+    success, ticker_non_empty, confidence_counts = write_csv(deduped_entries, output_path)
     if success:
         print(
             f"CSV build complete: files primary={files_read_primary}, name_based={files_read_name}, "
             f"total_records {len(all_entries)}, after_dedupe {len(deduped_entries)}, "
-            f"rows_written {len(deduped_entries)}, rows_with_ticker {ticker_non_empty}, failed_files {failed_files}."
+            f"rows_written {len(deduped_entries)}, rows_with_ticker {ticker_non_empty}, "
+            f"confidence_breakdown {confidence_counts}, failed_files {failed_files}."
         )
     else:
         print(
