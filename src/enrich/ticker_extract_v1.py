@@ -13,54 +13,12 @@ def get_project_root() -> Path:
     return script_dir.parent.parent
 
 
-CASHTAG_PATTERN = re.compile(r"\$([A-Z]{1,5})")
-EXCHANGE_PATTERN = re.compile(r"\b(?:NASDAQ|NYSE|OTC|TSX):([A-Z]{1,5})\b", re.IGNORECASE)
+CASHTAG_PATTERN = re.compile(r"\$([A-Za-z]{1,5})")
+EXCHANGE_PATTERN = re.compile(
+    r"(?:\(|\b)(?:NASDAQ|NYSE|AMEX|OTC|TSX)\s*:\s*([A-Za-z]{1,5})(?:\)|\b)",
+    re.IGNORECASE,
+)
 YAHOO_QUOTE_PATTERN = re.compile(r"finance\.yahoo\.com/quote/([A-Za-z]{1,5})")
-ALL_CAPS_TOKEN_PATTERN = re.compile(r"\b([A-Z]{2,5})\b")
-
-STOPLIST = {
-    "THE",
-    "AND",
-    "FOR",
-    "WITH",
-    "THIS",
-    "FROM",
-    "THAT",
-    "HAVE",
-    "WILL",
-    "YOUR",
-    "YOU",
-    "ARE",
-    "WAS",
-    "HAS",
-    "NEW",
-    "NEWS",
-    "POST",
-    "LINK",
-    "URL",
-    "HTTP",
-    "HTTPS",
-    "WWW",
-    "EDIT",
-    "NYSE",
-    "NASDAQ",
-    "OTC",
-    "TSX",
-    "AI",
-    "NBC",
-    "ABC",
-    "CBS",
-    "FDA",
-    "DOJ",
-    "TODAY",
-    "SEC",
-    "IRS",
-    "CDC",
-    "WHO",
-    "NATO",
-    "UN",
-    "EU"
-}
 
 
 def dedupe_preserve_order(items: Iterable[str]) -> List[str]:
@@ -74,27 +32,43 @@ def dedupe_preserve_order(items: Iterable[str]) -> List[str]:
     return ordered
 
 
-def extract_tickers(text: str) -> List[str]:
-    """Collect ticker candidates via cashtags, exchange prefixes, Yahoo quotes, and capped ALL_CAPS tokens."""
+def extract_tickers(text: str) -> Tuple[List[str], Dict[str, set[str]]]:
+    """Collect explicit ticker candidates via cashtags, exchange prefixes, and quote URLs."""
     if not text:
-        return []
+        return [], {}
 
     candidates: List[str] = []
+    reasons: Dict[str, set[str]] = {}
 
-    candidates.extend([m.upper() for m in CASHTAG_PATTERN.findall(text)])
-    candidates.extend([m.upper() for m in EXCHANGE_PATTERN.findall(text)])
-    candidates.extend([m.upper() for m in YAHOO_QUOTE_PATTERN.findall(text)])
+    for match in CASHTAG_PATTERN.findall(text):
+        ticker = match.upper()
+        if len(ticker) == 1:
+            continue
+        if "^" in ticker or "=" in ticker:
+            continue
+        candidates.append(ticker)
+        reasons.setdefault(ticker, set()).add("cashtag")
 
-    candidates.extend(
-        [
-            token
-            for token in ALL_CAPS_TOKEN_PATTERN.findall(text)
-            if token.upper() not in STOPLIST
-        ]
-    )
+    for match in EXCHANGE_PATTERN.findall(text):
+        ticker = match.upper()
+        if len(ticker) == 1:
+            continue
+        if "^" in ticker or "=" in ticker:
+            continue
+        candidates.append(ticker)
+        reasons.setdefault(ticker, set()).add("exchange_prefix")
 
-    normalized = [c.upper() for c in candidates if 1 <= len(c) <= 5]
-    return dedupe_preserve_order(normalized)
+    for match in YAHOO_QUOTE_PATTERN.findall(text):
+        ticker = match.upper()
+        if len(ticker) == 1:
+            continue
+        if "^" in ticker or "=" in ticker:
+            continue
+        candidates.append(ticker)
+        reasons.setdefault(ticker, set()).add("quote_url")
+
+    ordered = dedupe_preserve_order(candidates)
+    return ordered, reasons
 
 
 def resolve_primary_ticker(headline: str, text: str, url: str, candidates: List[str]) -> Tuple[str, Dict[str, int], str]:
@@ -174,14 +148,29 @@ def process_file(path: Path, kept_dir: Path, rejected_dir: Path) -> tuple[int, i
         url = entry.get("url") or ""
 
         combined_text = f"{headline}\n{text}\n{url}"
-        candidates = extract_tickers(combined_text)
-        primary, scores, reason = resolve_primary_ticker(headline, text, url, candidates)
+        candidates, candidate_sources = extract_tickers(combined_text)
+        primary, scores, _selection_reason = resolve_primary_ticker(headline, text, url, candidates)
+
+        if not candidates:
+            ticker_reason = "no_explicit_ticker"
+        elif not primary:
+            ticker_reason = "ambiguous"
+        else:
+            source_tags = candidate_sources.get(primary, set())
+            if "exchange_prefix" in source_tags:
+                ticker_reason = "exchange_prefix"
+            elif "cashtag" in source_tags:
+                ticker_reason = "cashtag"
+            elif "quote_url" in source_tags:
+                ticker_reason = "quote_url"
+            else:
+                ticker_reason = "explicit_ticker"
 
         enriched = entry.copy()
         enriched["tickers_all"] = candidates
         enriched["ticker_scores"] = [{"ticker": t, "score": s} for t, s in sorted(scores.items(), key=lambda x: x[1], reverse=True)]
-        enriched["ticker_resolution_version"] = "v1"
-        enriched["ticker_resolution_reason"] = reason
+        enriched["ticker_resolution_version"] = "v2"
+        enriched["ticker_resolution_reason"] = ticker_reason
 
         if primary:
             enriched["primary_ticker"] = primary

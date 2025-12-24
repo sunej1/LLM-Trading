@@ -64,15 +64,17 @@ def run_step(label: str, func) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the news pipeline.")
-    parser.add_argument("--clean", action="store_true", help="Clean derived data before running.")
+    parser.add_argument("--clean", action="store_true", help="Clean derived data with confirmation.")
     parser.add_argument(
         "--clean-force",
         action="store_true",
-        help="Clean derived data before running without confirmation.",
+        help="Clean derived data without confirmation.",
     )
     args = parser.parse_args()
 
-    if args.clean or args.clean_force:
+    if args.clean:
+        cleanup_derived_data(confirm=True)
+    else:
         cleanup_derived_data(confirm=not args.clean_force)
 
     steps_before_name_resolution = [
