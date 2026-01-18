@@ -13,6 +13,7 @@ from src.export.build_csv import main as csv_main
 
 
 DERIVED_DIRS = [
+    Path("data"),
     Path("data/processed"),
     Path("data/processed_clean"),
     Path("data/processed_primary"),

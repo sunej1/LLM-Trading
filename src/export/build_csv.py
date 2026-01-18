@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+from src.export.price_enrichment import compute_time_horizons, get_minute_prices, parse_timestamp_utc
+
+logger = logging.getLogger(__name__)
 
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
@@ -95,7 +99,11 @@ def source_credibility(entry: dict[str, Any]) -> str:
     return "unknown"
 
 
-def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[bool, int, Dict[str, int]]:
+def write_csv(
+    entries: Iterable[dict[str, Any]],
+    output_path: Path,
+    price_fetcher=get_minute_prices,
+) -> Tuple[bool, int, Dict[str, int]]:
     """Write entries to CSV with fixed schema; return success flag, count with non-empty ticker, and confidence breakdown."""
     fieldnames = [
         "event_id",
@@ -110,7 +118,8 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
         "category",
         "label_severity",
         "label_direction",
-        "label_time_horizon",
+        "label_time_horizon_1_min",
+        "label_time_horizon_2_min",
     ]
 
     ticker_non_empty = 0
@@ -126,6 +135,49 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
                     ticker_non_empty += 1
                 confidence_value = ticker_confidence(entry)
                 confidence_counts[confidence_value] = confidence_counts.get(confidence_value, 0) + 1
+
+                event_ts = parse_timestamp_utc(str(entry.get("timestamp") or ""))
+
+                label_time_horizon_1_min: Any = ""
+                label_time_horizon_2_min: Any = ""
+                bottom_ts = None
+                peak_ts = None
+
+                if ticker_value and confidence_value != "unknown" and event_ts:
+                    t_to_bottom, t_bottom_to_peak, bottom_ts, peak_ts = compute_time_horizons(
+                        ticker_value, event_ts, price_fetcher
+                    )
+                    if t_to_bottom is not None:
+                        label_time_horizon_1_min = t_to_bottom
+                    if t_bottom_to_peak is not None:
+                        label_time_horizon_2_min = t_bottom_to_peak
+                else:
+                    if not ticker_value:
+                        logger.debug("Skipping price enrichment for event_id=%s: missing ticker", entry.get("event_id"))
+                    elif confidence_value == "unknown":
+                        logger.debug(
+                            "Skipping price enrichment for event_id=%s: low ticker confidence (%s)",
+                            entry.get("event_id"),
+                            confidence_value,
+                        )
+                    elif not event_ts:
+                        logger.warning(
+                            "Invalid or missing timestamp for event_id=%s: %s",
+                            entry.get("event_id"),
+                            entry.get("timestamp"),
+                        )
+
+                logger.debug(
+                    "event_id=%s ticker=%s event_ts=%s bottom_ts=%s peak_ts=%s t_to_bottom=%s t_bottom_to_peak=%s",
+                    entry.get("event_id"),
+                    ticker_value,
+                    event_ts,
+                    bottom_ts,
+                    peak_ts,
+                    label_time_horizon_1_min if label_time_horizon_1_min != "" else None,
+                    label_time_horizon_2_min if label_time_horizon_2_min != "" else None,
+                )
+
                 row = {
                     "event_id": entry.get("event_id", ""),
                     "timestamp": entry.get("timestamp", ""),
@@ -139,7 +191,8 @@ def write_csv(entries: Iterable[dict[str, Any]], output_path: Path) -> Tuple[boo
                     "category": entry.get("category", ""),
                     "label_severity": entry.get("label_severity", ""),
                     "label_direction": entry.get("label_direction", ""),
-                    "label_time_horizon": entry.get("label_time_horizon", ""),
+                    "label_time_horizon_1_min": label_time_horizon_1_min,
+                    "label_time_horizon_2_min": label_time_horizon_2_min,
                 }
                 writer.writerow(row)
         return True, ticker_non_empty, confidence_counts

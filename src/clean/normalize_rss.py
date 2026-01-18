@@ -72,7 +72,6 @@ def normalize_entry(entry: dict[str, Any], source: str) -> dict[str, Any]:
         "category": "",
         "label_severity": "",
         "label_direction": "",
-        "label_time_horizon": "",
     }
 
 
