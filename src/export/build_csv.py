@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
 from src.export.price_enrichment import compute_time_horizons, get_minute_prices, parse_timestamp_utc
+from utils.article_extraction import get_article_excerpt
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,9 @@ def write_csv(
         "label_time_horizon_1_min",
         "label_time_horizon_2_min",
     ]
+    for field in ("article_excerpt", "article_char_count", "article_fetch_status"):
+        if field not in fieldnames:
+            fieldnames.append(field)
 
     ticker_non_empty = 0
     confidence_counts: Dict[str, int] = {"explicit": 0, "name_high": 0, "name_medium": 0, "unknown": 0}
@@ -178,6 +182,13 @@ def write_csv(
                     label_time_horizon_2_min if label_time_horizon_2_min != "" else None,
                 )
 
+                url_value = entry.get("url", "")
+                # article_excerpt carries a short extracted body to enrich labeling without sending full HTML to the LLM.
+                excerpt, status = get_article_excerpt(url_value) if url_value else (None, "failed")
+                article_excerpt = excerpt or ""
+                article_char_count = len(excerpt) if excerpt else 0
+                article_fetch_status = status
+
                 row = {
                     "event_id": entry.get("event_id", ""),
                     "timestamp": entry.get("timestamp", ""),
@@ -193,6 +204,10 @@ def write_csv(
                     "label_direction": entry.get("label_direction", ""),
                     "label_time_horizon_1_min": label_time_horizon_1_min,
                     "label_time_horizon_2_min": label_time_horizon_2_min,
+                    # If extraction fails we fall back to headline/text_clean so the LLM still receives a concise summary.
+                    "article_excerpt": article_excerpt,
+                    "article_char_count": article_char_count,
+                    "article_fetch_status": article_fetch_status,
                 }
                 writer.writerow(row)
         return True, ticker_non_empty, confidence_counts
