@@ -1,0 +1,8 @@
+models/
+data/
+**/*.gguf
+**/*.bin
+**/*.pt
+**/*.pth
+**/*.safetensors
+**/.DS_Store

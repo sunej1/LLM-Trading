@@ -41,6 +41,9 @@ Install core dependency:
 python3 -m pip install trafilatura
 ```
 
+# Large Files and Local Artifacts
+Model binaries and dataset outputs are generated locally and are ignored by git. Download the GGUF model separately and place it under `models/` (for example, `models/llama-3.1-8b.gguf`). Generated CSVs and intermediate JSON outputs live under `data/` and are not tracked.
+
 # Model Backend
 The project is designed to be model-agnostic. The labeling step can use either a hosted API model or a locally run open-source model. Model choice will be evaluated later based on cost, performance, and reproducibility.
 
