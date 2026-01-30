@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from src.export.price_enrichment import compute_time_horizons
+from src.news.export.price_enrichment import compute_time_horizons
 
 
 def build_fetcher(series):

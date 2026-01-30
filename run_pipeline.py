@@ -4,12 +4,12 @@ import argparse
 import shutil
 from pathlib import Path
 
-from src.ingest.rss_ingest import main as ingest_main
-from src.clean.normalize_rss import main as normalize_main
-from src.clean.text_cleaning_v1 import main as clean_main
-from src.enrich.ticker_extract_v1 import main as ticker_main
-from src.enrich.company_name_to_ticker_v1 import main as name_ticker_main
-from src.export.build_csv import main as csv_main
+from src.news.ingest.rss_ingest import main as ingest_main
+from src.news.clean.normalize_rss import main as normalize_main
+from src.news.clean.text_cleaning_v1 import main as clean_main
+from src.news.enrich.ticker_extract_v1 import main as ticker_main
+from src.news.enrich.company_name_to_ticker_v1 import main as name_ticker_main
+from src.news.export.build_csv import main as csv_main
 
 
 DERIVED_DIRS = [

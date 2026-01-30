@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-from src.export.price_enrichment import compute_time_horizons, get_minute_prices, parse_timestamp_utc
+from src.news.export.price_enrichment import compute_time_horizons, get_minute_prices, parse_timestamp_utc
 from utils.article_extraction import get_article_excerpt
 
 logger = logging.getLogger(__name__)
