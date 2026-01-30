@@ -252,8 +252,7 @@ def main() -> None:
     deduped_entries = dedupe_entries(all_entries)
 
     combined_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().isoformat(timespec="seconds").replace(":", "-")
-    output_path = combined_dir / f"combined_{timestamp}.csv"
+    output_path = combined_dir / "combined.csv"
 
     success, ticker_non_empty, confidence_counts = write_csv(deduped_entries, output_path)
     if success:
