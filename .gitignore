@@ -6,3 +6,4 @@ data/
 **/*.pth
 **/*.safetensors
 **/.DS_Store
+.venv/

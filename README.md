@@ -1,54 +1,145 @@
-# Project Overview
-This project builds an event-driven dataset from financial and general news. Articles flow through an ingestion pipeline into a structured CSV and are enriched with extracted article text (when available) plus event-level labels such as category, severity, and direction. Labeling is automated with a language model, and the focus is currently on data generation and labeling rather than trading execution.
+# Overview
+This repository builds an end-to-end news event pipeline: ingest live RSS news, normalize/clean text, enrich with tickers and metadata, and label events with structured LLM outputs (category, severity, direction, time horizons). The output is a combined CSV designed for downstream modeling. The long-term goal is a strategy pipeline that supports backtesting and, eventually, live trading. Current focus is data generation, enrichment, and labeling.
 
-# Pipeline Overview
-1. Ingest news articles into a combined CSV.
-2. Fetch readable article text from URLs using a reader-style extractor (trafilatura).
-3. Use a language model to label events in a structured format.
-4. Write enriched results to a new CSV for downstream analysis.
-5. Future work: model selection, fine-tuning, backtesting, strategy design.
+# Pipeline Diagram
+- Ingest RSS feeds -> raw JSON (`src/news/ingest/rss_ingest.py`)
+- Normalize schema -> normalized JSON (`src/news/clean/normalize_rss.py`)
+- Clean text -> cleaned JSON (`src/news/clean/text_cleaning_v1.py`)
+- Ticker extraction -> primary/rejected JSON (`src/news/enrich/ticker_extract_v1.py`)
+- Name-based ticker resolution -> primary/rejected JSON (`src/news/enrich/company_name_to_ticker_v1.py`)
+- Export combined CSV (+ article excerpt) (`src/news/export/build_csv.py`)
+- LLM labeling Stage A -> labeled CSV (`src/llm/label_csv_stage_a.py`)
 
-# Folder Structure
-- `src/ingest/` — ingestion scripts; read configs and write raw feeds.
-- `src/clean/` — normalization and text cleaning; read raw, write processed and processed_clean.
-- `src/enrich/` — enrichment (explicit ticker extraction, name-to-ticker mapping); read cleaned inputs, write processed_primary/processed_primary_name plus rejects.
-- `src/export/` — export utilities; combine processed data to CSV.
-- `config/` — YAML/CSV configs (`rss_sources.yaml`, `company_tickers.csv`).
-- `data/raw/` — raw RSS dumps from ingestion.
-- `data/processed/` — normalized JSON files.
-- `data/processed_clean/` — cleaned JSON files with `headline_clean`/`text_clean`.
-- `data/processed_primary/` — accepted records from explicit ticker extraction.
-- `data/processed_primary_name/` — accepted records from name-based ticker mapping.
-- `data/rejected*/` — rejected records (`data/rejected/` for explicit extraction, `data/rejected_name/` for name mapping).
-- `data/combined/` — consolidated CSV outputs.
-
-# Key Scripts
-- `run_pipeline.py` — orchestrator; optional cleanup then runs all stages in order.
-- `rss_ingest.py` — ingest RSS feeds to `data/raw/`.
-- `normalize_rss.py` — normalize raw entries to `data/processed/`.
-- `text_cleaning_v1.py` — clean headline/text and write to `data/processed_clean/`.
-- `ticker_extract_v1.py` — extract explicit tickers, keep confident items, reject ambiguous/no-ticker.
-- `company_name_to_ticker_v1.py` — map company names to tickers to fill missing primaries, separate accepted/rejected.
-- `build_csv.py` — combine enriched JSON to a timestamped CSV in `data/combined/`.
-
-# Dependencies
-- Python 3.9+
-- trafilatura
-- A language model backend (provider not yet finalized)
-
-Install core dependency:
-```bash
-python3 -m pip install trafilatura
+# Repository Layout
+```
+.
+├── config
+│   ├── company_tickers.csv
+│   └── rss_sources.yaml
+├── src
+│   ├── llm
+│   │   ├── __init__.py
+│   │   ├── label_csv_stage_a.py
+│   │   └── llm_backend.py
+│   └── news
+│       ├── clean
+│       │   ├── normalize_rss.py
+│       │   └── text_cleaning_v1.py
+│       ├── enrich
+│       │   ├── company_name_to_ticker_v1.py
+│       │   └── ticker_extract_v1.py
+│       ├── export
+│       │   ├── build_csv.py
+│       │   ├── price_enrichment.py
+│       │   └── test_price_enrichment.py
+│       └── ingest
+│           └── rss_ingest.py
+├── utils
+│   └── article_extraction.py
+├── run_pipeline.py
+└── README.md
 ```
 
-# Large Files and Local Artifacts
-Model binaries and dataset outputs are generated locally and are ignored by git. Download the GGUF model separately and place it under `models/` (for example, `models/llama-3.1-8b.gguf`). Generated CSVs and intermediate JSON outputs live under `data/` and are not tracked.
+# Setup
+Python version: 3.9+
 
-# Model Backend
-The project is designed to be model-agnostic. The labeling step can use either a hosted API model or a locally run open-source model. Model choice will be evaluated later based on cost, performance, and reproducibility.
+Create a venv:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-# Current Limitations
-- No fine-tuning has been performed yet.
-- Labels are generated automatically and may require review.
-- Article extraction may fail on some sources (paywalls, JS-heavy sites).
-- This stage focuses on building labeled datasets, not live trading.
+Install dependencies (no requirements.txt in repo):
+```bash
+python3 -m pip install feedparser requests pyyaml trafilatura
+```
+
+Notes:
+- The LLM labeling stage calls a local `llama-cli` binary (llama.cpp). Ensure it is installed and in `PATH`.
+
+# Quickstart (End-to-end)
+Run the full news pipeline (ingest -> clean -> enrich -> export):
+```bash
+python3 run_pipeline.py
+```
+
+Optional cleanup:
+```bash
+python3 run_pipeline.py --clean
+# or
+python3 run_pipeline.py --clean-force
+```
+
+Then run LLM labeling Stage A:
+```bash
+python3 src/llm/label_csv_stage_a.py \
+  --in data/combined/combined.csv \
+  --out data/combined/combined_labeled.csv
+```
+
+# How to Run Each Stage
+These scripts can be run individually if you want to inspect intermediate outputs:
+```bash
+python3 src/news/ingest/rss_ingest.py
+python3 src/news/clean/normalize_rss.py
+python3 src/news/clean/text_cleaning_v1.py
+python3 src/news/enrich/ticker_extract_v1.py
+python3 src/news/enrich/company_name_to_ticker_v1.py
+python3 src/news/export/build_csv.py
+```
+
+# LLM Labeling Stage A
+Input file: `data/combined/combined.csv`
+
+Expected input columns include:
+- event_id, timestamp, source, headline, text, url
+- ticker, ticker_confidence, source_credibility
+- category, label_severity, label_direction
+- label_time_horizon_1_min, label_time_horizon_2_min
+- article_excerpt, article_char_count, article_fetch_status
+
+Stage A output fills:
+- category
+- label_severity
+- label_direction
+- label_time_horizon_1_min
+- label_time_horizon_2_min
+- label_confidence
+- label_needs_review
+
+The labeling script sends a compact prompt and expects a strict JSON object with keys:
+`category`, `label_severity`, `label_direction`, `label_time_horizon_1_min`, `label_time_horizon_2_min`, `confidence`, `needs_review`.
+
+# Data & Models (Git Hygiene)
+Large artifacts are local-only and gitignored:
+- `data/` (raw, processed, combined outputs)
+- `models/` (GGUF model files)
+- `*.gguf`, `*.bin`, `*.pt`, `*.pth`, `*.safetensors`
+
+Download the GGUF model separately and place it under `models/` (e.g., `models/llama-3.1-8b.gguf`).
+Current local model: LLaMA 3.1 8B Q5 GGUF.
+
+# Backtesting vs Live Trading
+Implemented now:
+- RSS ingestion, normalization, text cleaning
+- Ticker enrichment (explicit + name-based)
+- CSV export with article excerpts
+- LLM labeling Stage A
+
+Planned:
+- Backtesting pipeline and evaluation
+- Strategy design and execution
+
+## Live Trading (Planned)
+Live trading is not implemented yet. The goal is to support live signal generation after backtesting and validation.
+
+# Roadmap / Next Steps
+- Stabilize LLM labeling outputs and schema validation
+- Add backtesting utilities and metrics
+- Expand company ticker mappings and source coverage
+- Add live trading integration after backtesting results
+
+# Notes / Troubleshooting
+- `data/` and `models/` are intentionally ignored; do not expect them to show up in git status.
+- If you push to GitHub, large files won’t be included; download models locally.
+- If Stage A labels are empty, verify that `llama-cli` is producing JSON for the prompt.
