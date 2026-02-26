@@ -1,4 +1,4 @@
-"""Ingest stage: fetch configured RSS feeds and store raw entries into data/raw as JSON."""
+"""Ingest stage: fetch configured RSS feeds and store raw entries into data/processing/raw as JSON."""
 from __future__ import annotations
 
 import json
@@ -42,9 +42,9 @@ def _json_fallback(obj: Any) -> str:
 
 
 def main() -> None:
-    """Load RSS source config, fetch each feed, and write raw JSON entries to data/raw."""
+    """Load RSS source config, fetch each feed, and write raw JSON entries to data/processing/raw."""
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent.parent
+    project_root = script_dir.parent.parent.parent
     config_path = project_root / "config" / "rss_sources.yaml"
 
     config = load_config(config_path)
@@ -56,7 +56,7 @@ def main() -> None:
         print("No RSS sources found in config.")
         return
 
-    output_dir = project_root / "data" / "raw"
+    output_dir = project_root / "data" / "processing" / "raw"
     output_dir.mkdir(parents=True, exist_ok=True)
     success_count = 0
     failure_count = 0

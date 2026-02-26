@@ -13,13 +13,14 @@ from src.news.export.build_csv import main as csv_main
 
 
 DERIVED_DIRS = [
-    Path("data"),
-    Path("data/processed"),
-    Path("data/processed_clean"),
-    Path("data/processed_primary"),
-    Path("data/processed_primary_name"),
-    Path("data/rejected"),
-    Path("data/rejected_name"),
+    Path("data/processing"),
+    Path("data/processing/raw"),
+    Path("data/processing/processed"),
+    Path("data/processing/processed_clean"),
+    Path("data/processing/processed_primary"),
+    Path("data/processing/processed_primary_name"),
+    Path("data/processing/rejected"),
+    Path("data/processing/rejected_name"),
     Path("data/combined"),
 ]
 

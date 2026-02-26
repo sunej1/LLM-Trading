@@ -1,4 +1,4 @@
-"""Normalize stage: convert raw RSS entries into a uniform schema under data/processed/."""
+"""Normalize stage: convert raw RSS entries into a uniform schema under data/processing/processed/."""
 from __future__ import annotations
 
 import json
@@ -12,7 +12,7 @@ from typing import Any, Iterable, List
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
-    return script_dir.parent.parent
+    return script_dir.parent.parent.parent
 
 
 def extract_source_from_filename(path: Path) -> str:
@@ -87,8 +87,8 @@ def normalize_entries(entries: Iterable[dict[str, Any]], source: str) -> List[di
 def main() -> None:
     """Load raw RSS dumps, normalize entries, and write normalized_*.json files."""
     project_root = get_project_root()
-    raw_dir = project_root / "data" / "raw"
-    processed_dir = project_root / "data" / "processed"
+    raw_dir = project_root / "data" / "processing" / "raw"
+    processed_dir = project_root / "data" / "processing" / "processed"
 
     processed_dir.mkdir(parents=True, exist_ok=True)
     raw_files = sorted([p for p in raw_dir.glob("*.json") if p.is_file()])

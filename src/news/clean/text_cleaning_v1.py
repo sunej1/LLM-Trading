@@ -11,7 +11,7 @@ from typing import Any, List
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
-    return script_dir.parent.parent
+    return script_dir.parent.parent.parent
 
 
 URL_PATTERN = re.compile(r"https?://\S+")
@@ -111,8 +111,8 @@ def process_file(path: Path, output_dir: Path) -> tuple[int, int, int, bool]:
 def main() -> None:
     """Iterate normalized files, clean text fields, and write to processed_clean with summaries."""
     project_root = get_project_root()
-    processed_dir = project_root / "data" / "processed"
-    output_dir = project_root / "data" / "processed_clean"
+    processed_dir = project_root / "data" / "processing" / "processed"
+    output_dir = project_root / "data" / "processing" / "processed_clean"
 
     normalized_files = sorted(processed_dir.glob("normalized_*.json"))
     if not normalized_files:

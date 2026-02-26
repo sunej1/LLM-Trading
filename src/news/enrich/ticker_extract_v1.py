@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
-    return script_dir.parent.parent
+    return script_dir.parent.parent.parent
 
 
 CASHTAG_PATTERN = re.compile(r"\$([A-Za-z]{1,5})")
@@ -210,9 +210,9 @@ def process_file(path: Path, kept_dir: Path, rejected_dir: Path) -> tuple[int, i
 def main() -> None:
     """Entry point: iterate cleaned files, resolve primary tickers, and emit keep/reject datasets."""
     project_root = get_project_root()
-    cleaned_dir = project_root / "data" / "processed_clean"
-    kept_dir = project_root / "data" / "processed_primary"
-    rejected_dir = project_root / "data" / "rejected"
+    cleaned_dir = project_root / "data" / "processing" / "processed_clean"
+    kept_dir = project_root / "data" / "processing" / "processed_primary"
+    rejected_dir = project_root / "data" / "processing" / "rejected"
 
     cleaned_files = sorted(cleaned_dir.glob("cleaned_normalized_*.json"))
     if not cleaned_files:

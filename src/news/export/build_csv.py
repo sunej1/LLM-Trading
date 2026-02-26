@@ -3,20 +3,16 @@ from __future__ import annotations
 
 import csv
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-from src.news.export.price_enrichment import compute_time_horizons, get_minute_prices, parse_timestamp_utc
 from utils.article_extraction import get_article_excerpt
-
-logger = logging.getLogger(__name__)
 
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
-    return script_dir.parent.parent
+    return script_dir.parent.parent.parent
 
 
 def load_entries(path: Path) -> List[dict[str, Any]] | None:
@@ -103,7 +99,6 @@ def source_credibility(entry: dict[str, Any]) -> str:
 def write_csv(
     entries: Iterable[dict[str, Any]],
     output_path: Path,
-    price_fetcher=get_minute_prices,
 ) -> Tuple[bool, int, Dict[str, int]]:
     """Write entries to CSV with fixed schema; return success flag, count with non-empty ticker, and confidence breakdown."""
     fieldnames = [
@@ -140,47 +135,8 @@ def write_csv(
                 confidence_value = ticker_confidence(entry)
                 confidence_counts[confidence_value] = confidence_counts.get(confidence_value, 0) + 1
 
-                event_ts = parse_timestamp_utc(str(entry.get("timestamp") or ""))
-
                 label_time_horizon_1_min: Any = ""
                 label_time_horizon_2_min: Any = ""
-                bottom_ts = None
-                peak_ts = None
-
-                if ticker_value and confidence_value != "unknown" and event_ts:
-                    t_to_bottom, t_bottom_to_peak, bottom_ts, peak_ts = compute_time_horizons(
-                        ticker_value, event_ts, price_fetcher
-                    )
-                    if t_to_bottom is not None:
-                        label_time_horizon_1_min = t_to_bottom
-                    if t_bottom_to_peak is not None:
-                        label_time_horizon_2_min = t_bottom_to_peak
-                else:
-                    if not ticker_value:
-                        logger.debug("Skipping price enrichment for event_id=%s: missing ticker", entry.get("event_id"))
-                    elif confidence_value == "unknown":
-                        logger.debug(
-                            "Skipping price enrichment for event_id=%s: low ticker confidence (%s)",
-                            entry.get("event_id"),
-                            confidence_value,
-                        )
-                    elif not event_ts:
-                        logger.warning(
-                            "Invalid or missing timestamp for event_id=%s: %s",
-                            entry.get("event_id"),
-                            entry.get("timestamp"),
-                        )
-
-                logger.debug(
-                    "event_id=%s ticker=%s event_ts=%s bottom_ts=%s peak_ts=%s t_to_bottom=%s t_bottom_to_peak=%s",
-                    entry.get("event_id"),
-                    ticker_value,
-                    event_ts,
-                    bottom_ts,
-                    peak_ts,
-                    label_time_horizon_1_min if label_time_horizon_1_min != "" else None,
-                    label_time_horizon_2_min if label_time_horizon_2_min != "" else None,
-                )
 
                 url_value = entry.get("url", "")
                 # article_excerpt carries a short extracted body to enrich labeling without sending full HTML to the LLM.
@@ -219,8 +175,8 @@ def write_csv(
 def main() -> None:
     """Aggregate enriched JSON files and emit a combined CSV snapshot with summary logging."""
     project_root = get_project_root()
-    primary_dir = project_root / "data" / "processed_primary"
-    name_dir = project_root / "data" / "processed_primary_name"
+    primary_dir = project_root / "data" / "processing" / "processed_primary"
+    name_dir = project_root / "data" / "processing" / "processed_primary_name"
     combined_dir = project_root / "data" / "combined"
 
     all_entries: List[dict[str, Any]] = []

@@ -18,7 +18,7 @@ BODY_MATCH_CAP = 5
 def get_project_root() -> Path:
     """Return repository root inferred from script location."""
     script_dir = Path(__file__).resolve().parent
-    return script_dir.parent.parent
+    return script_dir.parent.parent.parent
 
 
 def normalize_company_name(raw: str) -> str:
@@ -245,9 +245,9 @@ def process_file(
 def main() -> None:
     """Iterate cleaned files, resolve tickers by company names, and write outputs."""
     project_root = get_project_root()
-    cleaned_dir = project_root / "data" / "processed_clean"
-    accepted_dir = project_root / "data" / "processed_primary_name"
-    rejected_dir = project_root / "data" / "rejected_name"
+    cleaned_dir = project_root / "data" / "processing" / "processed_clean"
+    accepted_dir = project_root / "data" / "processing" / "processed_primary_name"
+    rejected_dir = project_root / "data" / "processing" / "rejected_name"
     mapping_path = project_root / "config" / "company_tickers.csv"
 
     patterns = load_company_mapping(mapping_path)

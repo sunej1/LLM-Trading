@@ -16,6 +16,9 @@ This repository builds an end-to-end news event pipeline: ingest live RSS news, 
 ├── config
 │   ├── company_tickers.csv
 │   └── rss_sources.yaml
+├── data
+│   ├── combined
+│   └── processing
 ├── src
 │   ├── llm
 │   │   ├── __init__.py
@@ -30,8 +33,6 @@ This repository builds an end-to-end news event pipeline: ingest live RSS news, 
 │       │   └── ticker_extract_v1.py
 │       ├── export
 │       │   ├── build_csv.py
-│       │   ├── price_enrichment.py
-│       │   └── test_price_enrichment.py
 │       └── ingest
 │           └── rss_ingest.py
 ├── utils
@@ -49,9 +50,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install dependencies (no requirements.txt in repo):
+Install dependencies:
 ```bash
-python3 -m pip install feedparser requests pyyaml trafilatura
+python3 -m pip install -r requirements.txt
 ```
 
 Notes:
@@ -112,7 +113,7 @@ The labeling script sends a compact prompt and expects a strict JSON object with
 
 # Data & Models (Git Hygiene)
 Large artifacts are local-only and gitignored:
-- `data/` (raw, processed, combined outputs)
+- `data/` (processing outputs, combined exports, labeled datasets)
 - `models/` (GGUF model files)
 - `*.gguf`, `*.bin`, `*.pt`, `*.pth`, `*.safetensors`
 
