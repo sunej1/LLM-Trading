@@ -51,6 +51,24 @@ SESSION.headers.update(
 
 MAX_ARTICLES_PER_COMPANY = 20
 PROGRESS_EVERY = 5
+CSV_QUOTING = csv.QUOTE_ALL
+MAX_TEXT_CHARS = 8000
+
+
+def sanitize_row(row: Dict[str, str]) -> Dict[str, str]:
+    sanitized: Dict[str, str] = {}
+    for key, value in row.items():
+        if isinstance(value, str):
+            cleaned = value.replace("\r", " ").replace("\n", " ")
+            cleaned = " ".join(cleaned.split())
+            sanitized[key] = cleaned
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+def truncate_text(text: str, max_chars: int = MAX_TEXT_CHARS) -> str:
+    return text[:max_chars] if text else ""
 
 
 def read_companies(path: Path) -> List[Dict[str, str]]:
@@ -79,8 +97,14 @@ def read_companies(path: Path) -> List[Dict[str, str]]:
 def seendate_to_iso(raw: str) -> str:
     if not raw:
         return ""
+    raw = raw.strip()
     try:
         dt = datetime.strptime(raw, "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    except Exception:
+        pass
+    try:
+        dt = datetime.strptime(raw, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
         return dt.isoformat()
     except Exception:
         return ""
@@ -169,12 +193,13 @@ def main() -> None:
     total_failures = 0
     total_corrupted = 0
     total_no_timestamp = 0
+    printed_seendate_debug = False
 
     with OUTPUT_TRAIN.open("w", newline="", encoding="utf-8") as train_f, OUTPUT_BACKTEST.open(
         "w", newline="", encoding="utf-8"
     ) as backtest_f:
-        train_writer = csv.DictWriter(train_f, fieldnames=fieldnames)
-        backtest_writer = csv.DictWriter(backtest_f, fieldnames=fieldnames)
+        train_writer = csv.DictWriter(train_f, fieldnames=fieldnames, quoting=CSV_QUOTING)
+        backtest_writer = csv.DictWriter(backtest_f, fieldnames=fieldnames, quoting=CSV_QUOTING)
         train_writer.writeheader()
         backtest_writer.writeheader()
 
@@ -238,11 +263,17 @@ def main() -> None:
 
                 headline = str(article.get("title") or "").strip()
                 # Temporarily allow empty timestamps to diagnose empty output.
-                raw_seendate = article.get("seendate")
+                raw_seendate = article.get("seendate") or article.get("seenDate")
                 timestamp = seendate_to_iso(str(raw_seendate)) if raw_seendate else ""
                 if not timestamp:
                     total_no_timestamp += 1
                     timestamp = ""
+                    if not printed_seendate_debug:
+                        printed_seendate_debug = True
+                        print(
+                            f"seendate_missing: raw={raw_seendate!r} keys={sorted(article.keys())}",
+                            flush=True,
+                        )
 
                 text = fetch_article_text(url)
                 if not text:
@@ -268,7 +299,7 @@ def main() -> None:
                     "event_id": str(uuid.uuid4()),
                     "timestamp": timestamp,
                     "headline": headline,
-                    "text": text,
+                    "text": truncate_text(text),
                     "ticker": ticker,
                     "label_severity": "",
                     "label_direction": "",
@@ -291,12 +322,12 @@ def main() -> None:
                 train_rows = company_rows[split_idx:]
 
                 for row in train_rows:
-                    train_writer.writerow(row)
+                    train_writer.writerow(sanitize_row(row))
                     total_written += 1
                     company_written += 1
 
                 for row in backtest_rows:
-                    backtest_writer.writerow(row)
+                    backtest_writer.writerow(sanitize_row(row))
                     total_written += 1
                     company_written += 1
 
