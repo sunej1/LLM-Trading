@@ -5,7 +5,10 @@ import re
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-from llm_backend import label_with_llama
+try:
+    from src.llm.llm_backend import label_with_llama
+except ModuleNotFoundError:
+    from llm_backend import label_with_llama
 
 
 VALID_DIRECTIONS = {"positive", "negative", "mixed", "neutral"}
@@ -223,14 +226,9 @@ def _sanitize_row_strings(row: Dict[str, Any]) -> Dict[str, Any]:
     return sanitized
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Label combined CSV rows using local LLaMA.")
-    parser.add_argument("--in", dest="input_path", required=True, help="Input combined CSV path.")
-    parser.add_argument("--out", dest="output_path", required=True, help="Output labeled CSV path.")
-    parser.add_argument("--limit", dest="limit", type=int, default=None, help="Optional max rows to process.")
-    args = parser.parse_args()
-
-    with open(args.input_path, "r", encoding="utf-8") as f:
+def label_csv(input_path: str, output_path: str, limit: Optional[int] = None) -> None:
+    """Label a combined CSV and write the labeled output CSV."""
+    with open(input_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         input_fieldnames = reader.fieldnames or []
         rows = list(reader)
@@ -241,9 +239,9 @@ def main() -> None:
         if field not in output_fieldnames:
             output_fieldnames.append(field)
 
-    processed_rows = process_rows(rows, args.limit)
+    processed_rows = process_rows(rows, limit)
 
-    print(f"Writing {len(processed_rows)} rows to {args.output_path}", file=sys.stderr)
+    print(f"Writing {len(processed_rows)} rows to {output_path}", file=sys.stderr)
 
     sanitized_rows = []
     for row in processed_rows:
@@ -256,11 +254,21 @@ def main() -> None:
         row["label_needs_review"] = "true" if str(row.get("label_needs_review", "true")).lower() in {"", "true", "1", "yes"} else "false"
         sanitized_rows.append(_sanitize_row_strings(row))
 
-    with open(args.output_path, "w", newline="", encoding="utf-8") as f:
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
         print(f"FIELDNAMES={output_fieldnames}", file=sys.stderr)
         writer = csv.DictWriter(f, fieldnames=output_fieldnames)
         writer.writeheader()
         writer.writerows(sanitized_rows)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Label combined CSV rows using local LLaMA.")
+    parser.add_argument("--in", dest="input_path", required=True, help="Input combined CSV path.")
+    parser.add_argument("--out", dest="output_path", required=True, help="Output labeled CSV path.")
+    parser.add_argument("--limit", dest="limit", type=int, default=None, help="Optional max rows to process.")
+    args = parser.parse_args()
+
+    label_csv(args.input_path, args.output_path, args.limit)
 
 
 if __name__ == "__main__":

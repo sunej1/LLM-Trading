@@ -5,3 +5,8 @@ trafilatura
 lxml_html_clean
 urllib3<2
 beautifulsoup4
+pandas
+numpy
+matplotlib
+yfinance
+statsmodels

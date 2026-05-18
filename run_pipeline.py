@@ -3,6 +3,7 @@
 import argparse
 import shutil
 from pathlib import Path
+from typing import Optional
 
 from src.news.ingest.rss_ingest import main as ingest_main
 from src.news.clean.normalize_rss import main as normalize_main
@@ -10,6 +11,7 @@ from src.news.clean.text_cleaning_v1 import main as clean_main
 from src.news.enrich.ticker_extract_v1 import main as ticker_main
 from src.news.enrich.company_name_to_ticker_v1 import main as name_ticker_main
 from src.news.export.build_csv import main as csv_main
+from src.llm.label_csv_stage_a import label_csv
 
 
 DERIVED_DIRS = [
@@ -23,6 +25,9 @@ DERIVED_DIRS = [
     Path("data/processing/rejected_name"),
     Path("data/combined"),
 ]
+
+COMBINED_CSV_PATH = Path("data/combined/combined.csv")
+LABELED_CSV_PATH = Path("data/combined/combined_labeled.csv")
 
 
 def cleanup_derived_data(confirm: bool = True) -> None:
@@ -64,6 +69,15 @@ def run_step(label: str, func) -> bool:
         return False
 
 
+def run_llm_labeling(limit: Optional[int] = None) -> None:
+    """Run LLM labeling from the combined CSV into the labeled CSV."""
+    label_csv(
+        input_path=str(COMBINED_CSV_PATH),
+        output_path=str(LABELED_CSV_PATH),
+        limit=limit,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the news pipeline.")
     parser.add_argument("--clean", action="store_true", help="Clean derived data with confirmation.")
@@ -71,6 +85,12 @@ def main() -> None:
         "--clean-force",
         action="store_true",
         help="Clean derived data without confirmation.",
+    )
+    parser.add_argument(
+        "--label-limit",
+        type=int,
+        default=None,
+        help="Optional max rows to process during LLM labeling.",
     )
     args = parser.parse_args()
 
@@ -102,7 +122,10 @@ def main() -> None:
     if not run_step("CSV building", csv_main):
         return
 
-    print("Pipeline complete. Combined CSV is ready.")
+    if not run_step("LLM labeling Stage A", lambda: run_llm_labeling(args.label_limit)):
+        return
+
+    print("Pipeline complete. Labeled CSV is ready.")
 
 
 if __name__ == "__main__":
