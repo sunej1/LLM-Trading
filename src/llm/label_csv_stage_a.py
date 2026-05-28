@@ -256,7 +256,16 @@ def label_csv(input_path: str, output_path: str, limit: Optional[int] = None) ->
 
     # Preserve existing order; append new columns if missing.
     output_fieldnames = list(input_fieldnames)
-    for field in ["label_confidence", "label_needs_review"]:
+    label_output_fields = [
+        "category",
+        "label_severity",
+        "label_direction",
+        "label_time_horizon_1_min",
+        "label_time_horizon_2_min",
+        "label_confidence",
+        "label_needs_review",
+    ]
+    for field in label_output_fields:
         if field not in output_fieldnames:
             output_fieldnames.append(field)
 

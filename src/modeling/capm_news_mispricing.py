@@ -28,6 +28,7 @@ DEFAULT_OUTPUT_PATH = PROJECT_ROOT / "data" / "combined" / "capm_event_level_mis
 MARKET_TICKER = "SPY"
 ROLLING_WINDOW = 252
 RISK_FREE_DAILY = 0.0
+DAILY_INTERVALS = {"1d", "5d", "1wk", "1mo", "3mo"}
 
 SEVERITY_MOVE_MAP = {
     1: 0.005,
@@ -104,19 +105,35 @@ def _select_price_column(price_data: pd.DataFrame) -> pd.Series:
     raise ValueError("Downloaded price data did not include Adj Close or Close.")
 
 
+def is_intraday_interval(price_interval: str) -> bool:
+    """Return True when the requested Yahoo interval is intraday."""
+    return price_interval.lower() not in DAILY_INTERVALS
+
+
+def _index_to_naive_utc(index: pd.Index) -> pd.Series:
+    """Convert Yahoo price index values to timezone-naive UTC timestamps."""
+    timestamps = pd.to_datetime(index)
+    if getattr(timestamps, "tz", None) is not None:
+        timestamps = timestamps.tz_convert("UTC").tz_localize(None)
+    return pd.Series(timestamps)
+
+
 def get_price_data(
     ticker: str,
     start: pd.Timestamp,
     end: pd.Timestamp,
     price_cache: Dict[str, pd.DataFrame],
+    price_interval: str = "1d",
 ) -> pd.DataFrame:
-    """Download and cache daily price data by ticker."""
+    """Download and cache price data by ticker and interval."""
     ticker = normalize_yahoo_ticker(ticker)
-    if ticker in price_cache:
-        return price_cache[ticker]
+    price_interval = price_interval.lower()
+    cache_key = f"{ticker}|{price_interval}"
+    if cache_key in price_cache:
+        return price_cache[cache_key]
     if not ticker:
         empty_prices = pd.DataFrame(columns=["date", "price"])
-        price_cache[ticker] = empty_prices
+        price_cache[cache_key] = empty_prices
         return empty_prices
 
     with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
@@ -124,7 +141,9 @@ def get_price_data(
             ticker,
             start=start.strftime("%Y-%m-%d"),
             end=end.strftime("%Y-%m-%d"),
+            interval=price_interval,
             auto_adjust=False,
+            prepost=False,
             progress=False,
         )
 
@@ -133,12 +152,12 @@ def get_price_data(
     else:
         prices = pd.DataFrame(
             {
-                "date": pd.to_datetime(raw_prices.index).tz_localize(None),
+                "date": _index_to_naive_utc(raw_prices.index),
                 "price": _select_price_column(raw_prices).to_numpy(),
             }
         ).sort_values("date")
 
-    price_cache[ticker] = prices
+    price_cache[cache_key] = prices
     return prices
 
 
@@ -146,8 +165,9 @@ def find_previous_next_trading_days(
     event_timestamp: pd.Timestamp,
     stock_prices: pd.DataFrame,
     market_prices: pd.DataFrame,
+    price_interval: str = "1d",
 ) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
-    """Find valid stock/market trading days immediately before and after an event."""
+    """Find valid stock/market bars immediately before and after an event."""
     if pd.isna(event_timestamp) or stock_prices.empty or market_prices.empty:
         return None, None
 
@@ -158,9 +178,12 @@ def find_previous_next_trading_days(
     if common_dates.empty:
         return None, None
 
-    event_date = event_timestamp.tz_convert(None).normalize()
-    previous_dates = common_dates.loc[common_dates < event_date]
-    next_dates = common_dates.loc[common_dates > event_date]
+    event_dt = event_timestamp.tz_convert("UTC").tz_localize(None)
+    if not is_intraday_interval(price_interval):
+        event_dt = event_dt.normalize()
+
+    previous_dates = common_dates.loc[common_dates < event_dt]
+    next_dates = common_dates.loc[common_dates > event_dt]
 
     previous_trading_day = previous_dates.iloc[-1] if not previous_dates.empty else None
     next_trading_day = next_dates.iloc[0] if not next_dates.empty else None
@@ -216,12 +239,14 @@ def compute_event_mispricing(
     market_prices: pd.DataFrame,
     rolling_window: int = ROLLING_WINDOW,
     risk_free_daily: float = RISK_FREE_DAILY,
+    price_interval: str = "1d",
 ) -> Dict[str, object]:
     """Compute CAPM and news-adjusted mispricing fields for one event row."""
     previous_trading_day, next_trading_day = find_previous_next_trading_days(
         event["_event_timestamp"],
         stock_prices,
         market_prices,
+        price_interval=price_interval,
     )
 
     previous_stock_price = _price_on_date(stock_prices, previous_trading_day)
@@ -258,6 +283,7 @@ def compute_event_mispricing(
     return {
         "previous_trading_day": previous_trading_day,
         "next_trading_day": next_trading_day,
+        "price_interval": price_interval,
         "previous_stock_price": previous_stock_price,
         "actual_stock_price": actual_stock_price,
         "previous_market_price": previous_market_price,
@@ -280,10 +306,13 @@ def process_all_events(
     market_ticker: str = MARKET_TICKER,
     rolling_window: int = ROLLING_WINDOW,
     risk_free_daily: float = RISK_FREE_DAILY,
+    verbose: bool = False,
+    price_interval: str = "1d",
 ) -> pd.DataFrame:
     """Process every input event into one output row with CAPM/news mispricing fields."""
     events = load_events(event_path)
     price_cache: Dict[str, pd.DataFrame] = {}
+    price_interval = price_interval.lower()
 
     valid_timestamps = events["_event_timestamp"].dropna()
     if valid_timestamps.empty:
@@ -292,16 +321,47 @@ def process_all_events(
     else:
         min_event_date = valid_timestamps.min().tz_convert(None).normalize()
         max_event_date = valid_timestamps.max().tz_convert(None).normalize()
-        # Calendar-day buffer covers the 252-trading-day beta window plus holidays.
-        download_start = min_event_date - pd.Timedelta(days=500)
+        if is_intraday_interval(price_interval):
+            # Yahoo intraday history is limited. Use recent data only, which is
+            # enough for minute/hour event windows and the prior-bar beta window.
+            intraday_floor = pd.Timestamp.utcnow().tz_localize(None).normalize() - pd.Timedelta(days=58)
+            download_start = max(min_event_date - pd.Timedelta(days=10), intraday_floor)
+        else:
+            # Calendar-day buffer covers the 252-trading-day beta window plus holidays.
+            download_start = min_event_date - pd.Timedelta(days=500)
         download_end = max_event_date + pd.Timedelta(days=10)
 
-    market_prices = get_price_data(market_ticker, download_start, download_end, price_cache)
+    market_prices = get_price_data(
+        market_ticker,
+        download_start,
+        download_end,
+        price_cache,
+        price_interval=price_interval,
+    )
 
     result_rows = []
-    for _, event in events.iterrows():
+    total_events = len(events)
+    for idx, event in events.iterrows():
+        row_num = len(result_rows) + 1
         ticker = event.get("_ticker_normalized", "")
-        stock_prices = get_price_data(ticker, download_start, download_end, price_cache)
+        yahoo_ticker = event.get("yahoo_ticker", "")
+        event_id = event.get("event_id", "")
+        timestamp = event.get("timestamp", "")
+        if verbose:
+            print(
+                f"[capm] start row {row_num}/{total_events} "
+                f"event_id={event_id} ticker={ticker} yahoo_ticker={yahoo_ticker} "
+                f"timestamp={timestamp} interval={price_interval}",
+                flush=True,
+            )
+
+        stock_prices = get_price_data(
+            ticker,
+            download_start,
+            download_end,
+            price_cache,
+            price_interval=price_interval,
+        )
 
         computed_fields = compute_event_mispricing(
             event,
@@ -309,6 +369,7 @@ def process_all_events(
             market_prices,
             rolling_window=rolling_window,
             risk_free_daily=risk_free_daily,
+            price_interval=price_interval,
         )
 
         # Preserve all original CSV columns and append computed event-level fields.
@@ -323,6 +384,16 @@ def process_all_events(
         ).to_dict()
         result.update(computed_fields)
         result_rows.append(result)
+
+        if verbose:
+            print(
+                f"[capm] finished row {row_num}/{total_events} "
+                f"prev={computed_fields['previous_trading_day']} "
+                f"next={computed_fields['next_trading_day']} "
+                f"beta={computed_fields['beta']} "
+                f"mispricing={computed_fields['news_adjusted_mispricing_pct']}",
+                flush=True,
+            )
 
     output = pd.DataFrame(result_rows)
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -92,14 +92,28 @@ def run_capm_news_mispricing() -> None:
     print(f"Output: {CAPM_MISPRICING_CSV_PATH}")
 
 
-def run_backtesting(label_events: bool = False, label_limit: Optional[int] = None) -> None:
+def run_backtesting(
+    label_events: bool = False,
+    label_limit: Optional[int] = None,
+    price_interval: str = "15m",
+) -> None:
     """Run held-out event-level backtesting data from data/training/backtest.csv."""
-    from src.backtesting.event_backtest import run_backtest
+    from src.backtesting.capm_backtest import run_capm_backtest
+    from src.backtesting.label_backtest_events import (
+        DEFAULT_OUTPUT_PATH as BACKTEST_LABELED_PATH,
+        label_backtest_events,
+    )
 
-    results, summary = run_backtest(
-        input_path=BACKTEST_INPUT_PATH,
-        label_events=label_events,
-        label_limit=label_limit,
+    if label_events:
+        label_backtest_events(
+            input_path=BACKTEST_INPUT_PATH,
+            output_path=BACKTEST_LABELED_PATH,
+            limit=label_limit,
+        )
+
+    results, summary = run_capm_backtest(
+        input_path=BACKTEST_LABELED_PATH,
+        price_interval=price_interval,
     )
     print(f"Backtest rows written: {len(results)}")
     print(summary.to_string(index=False))
@@ -134,6 +148,11 @@ def main() -> None:
         type=int,
         default=None,
         help="Optional max rows to label when --label-backtest is used.",
+    )
+    parser.add_argument(
+        "--backtest-price-interval",
+        default="15m",
+        help="Yahoo price interval for backtesting, such as 1d, 1h, 60m, 15m, 5m, or 1m.",
     )
     args = parser.parse_args()
 
@@ -173,7 +192,11 @@ def main() -> None:
 
     if args.run_backtest and not run_step(
         "Held-out event backtest",
-        lambda: run_backtesting(args.label_backtest, args.backtest_label_limit),
+        lambda: run_backtesting(
+            args.label_backtest,
+            args.backtest_label_limit,
+            args.backtest_price_interval,
+        ),
     ):
         return
 
