@@ -6,7 +6,9 @@ realized next-trading-day price move.
 """
 from __future__ import annotations
 
+import contextlib
 import os
+import re
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -35,12 +37,24 @@ SEVERITY_MOVE_MAP = {
     5: 0.18,
 }
 
+YAHOO_TICKER_ALIASES = {
+    "BRKA": "BRK-A",
+    "BRK.A": "BRK-A",
+    "BRK/A": "BRK-A",
+    "BRKB": "BRK-B",
+    "BRK.B": "BRK-B",
+    "BRK/B": "BRK-B",
+}
+MAX_TICKER_LENGTH = 6
+TICKER_PATTERN = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
+
 
 def load_events(event_path: Path = DEFAULT_EVENT_PATH) -> pd.DataFrame:
     """Read labeled events without modifying the source CSV."""
     events = pd.read_csv(event_path)
     events["_event_timestamp"] = pd.to_datetime(events["timestamp"], errors="coerce", utc=True)
     events["_ticker_normalized"] = events["ticker"].astype(str).str.upper().str.strip()
+    events["yahoo_ticker"] = events["_ticker_normalized"].apply(normalize_yahoo_ticker)
     events["_label_severity_numeric"] = pd.to_numeric(events["label_severity"], errors="coerce")
     events["_label_direction_numeric"] = pd.to_numeric(events["label_direction"], errors="coerce")
     direction_map = {"positive": 1, "neutral": 0, "mixed": 0, "negative": -1}
@@ -49,6 +63,28 @@ def load_events(event_path: Path = DEFAULT_EVENT_PATH) -> pd.DataFrame:
         direction_text.map(direction_map)
     )
     return events
+
+
+def normalize_yahoo_ticker(ticker: object) -> str:
+    """Normalize ticker strings into Yahoo Finance format, or blank if invalid."""
+    if pd.isna(ticker):
+        return ""
+
+    normalized = str(ticker).upper().strip().replace("/", "-")
+    if not normalized or normalized in {"NAN", "NONE", "NULL"}:
+        return ""
+
+    normalized = YAHOO_TICKER_ALIASES.get(normalized, normalized)
+    if "." in normalized:
+        parts = normalized.split(".")
+        if len(parts) == 2 and all(parts):
+            normalized = f"{parts[0]}-{parts[1]}"
+
+    if len(normalized.replace("-", "")) > MAX_TICKER_LENGTH:
+        return ""
+    if not TICKER_PATTERN.match(normalized):
+        return ""
+    return normalized
 
 
 def _select_price_column(price_data: pd.DataFrame) -> pd.Series:
@@ -75,17 +111,22 @@ def get_price_data(
     price_cache: Dict[str, pd.DataFrame],
 ) -> pd.DataFrame:
     """Download and cache daily price data by ticker."""
-    ticker = str(ticker).upper().strip()
+    ticker = normalize_yahoo_ticker(ticker)
     if ticker in price_cache:
         return price_cache[ticker]
+    if not ticker:
+        empty_prices = pd.DataFrame(columns=["date", "price"])
+        price_cache[ticker] = empty_prices
+        return empty_prices
 
-    raw_prices = yf.download(
-        ticker,
-        start=start.strftime("%Y-%m-%d"),
-        end=end.strftime("%Y-%m-%d"),
-        auto_adjust=False,
-        progress=False,
-    )
+    with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
+        raw_prices = yf.download(
+            ticker,
+            start=start.strftime("%Y-%m-%d"),
+            end=end.strftime("%Y-%m-%d"),
+            auto_adjust=False,
+            progress=False,
+        )
 
     if raw_prices.empty:
         prices = pd.DataFrame(columns=["date", "price"])
@@ -275,8 +316,8 @@ def process_all_events(
             labels=[
                 "_event_timestamp",
                 "_ticker_normalized",
-                "_label_severity_numeric",
                 "_label_direction_numeric",
+                "_label_severity_numeric",
             ],
             errors="ignore",
         ).to_dict()

@@ -28,6 +28,8 @@ DERIVED_DIRS = [
 
 COMBINED_CSV_PATH = Path("data/combined/combined.csv")
 LABELED_CSV_PATH = Path("data/combined/combined_labeled.csv")
+CAPM_MISPRICING_CSV_PATH = Path("data/combined/capm_event_level_mispricing.csv")
+BACKTEST_INPUT_PATH = Path("data/training/backtest.csv")
 
 
 def cleanup_derived_data(confirm: bool = True) -> None:
@@ -78,6 +80,31 @@ def run_llm_labeling(limit: Optional[int] = None) -> None:
     )
 
 
+def run_capm_news_mispricing() -> None:
+    """Run event-level CAPM plus news-adjusted mispricing preparation."""
+    from src.modeling.capm_news_mispricing import process_all_events
+
+    output = process_all_events(
+        event_path=LABELED_CSV_PATH,
+        output_path=CAPM_MISPRICING_CSV_PATH,
+    )
+    print(f"CAPM/news mispricing rows written: {len(output)}")
+    print(f"Output: {CAPM_MISPRICING_CSV_PATH}")
+
+
+def run_backtesting(label_events: bool = False, label_limit: Optional[int] = None) -> None:
+    """Run held-out event-level backtesting data from data/training/backtest.csv."""
+    from src.backtesting.event_backtest import run_backtest
+
+    results, summary = run_backtest(
+        input_path=BACKTEST_INPUT_PATH,
+        label_events=label_events,
+        label_limit=label_limit,
+    )
+    print(f"Backtest rows written: {len(results)}")
+    print(summary.to_string(index=False))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the news pipeline.")
     parser.add_argument("--clean", action="store_true", help="Clean derived data with confirmation.")
@@ -91,6 +118,22 @@ def main() -> None:
         type=int,
         default=None,
         help="Optional max rows to process during LLM labeling.",
+    )
+    parser.add_argument(
+        "--run-backtest",
+        action="store_true",
+        help="Run held-out backtest data after the live pipeline finishes.",
+    )
+    parser.add_argument(
+        "--label-backtest",
+        action="store_true",
+        help="Label data/training/backtest.csv before running held-out backtesting.",
+    )
+    parser.add_argument(
+        "--backtest-label-limit",
+        type=int,
+        default=None,
+        help="Optional max rows to label when --label-backtest is used.",
     )
     args = parser.parse_args()
 
@@ -125,7 +168,16 @@ def main() -> None:
     if not run_step("LLM labeling Stage A", lambda: run_llm_labeling(args.label_limit)):
         return
 
-    print("Pipeline complete. Labeled CSV is ready.")
+    if not run_step("CAPM news-adjusted mispricing", run_capm_news_mispricing):
+        return
+
+    if args.run_backtest and not run_step(
+        "Held-out event backtest",
+        lambda: run_backtesting(args.label_backtest, args.backtest_label_limit),
+    ):
+        return
+
+    print("Pipeline complete. CAPM event-level mispricing CSV is ready.")
 
 
 if __name__ == "__main__":

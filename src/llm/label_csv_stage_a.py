@@ -147,6 +147,7 @@ def validate_output(raw: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], bool
 def process_rows(rows: List[Dict[str, str]], limit: Optional[int]) -> List[Dict[str, str]]:
     printed_debug = False
     processed: List[Dict[str, str]] = []
+    total_to_label = min(len(rows), limit) if limit is not None else len(rows)
     for idx, row in enumerate(rows):
         updated = row.copy()
 
@@ -156,6 +157,15 @@ def process_rows(rows: List[Dict[str, str]], limit: Optional[int]) -> List[Dict[
             updated["label_needs_review"] = "true"
             processed.append(updated)
             continue
+
+        row_num = idx + 1
+        ticker = row.get("ticker", "")
+        headline = str(row.get("headline", "")).strip()
+        print(
+            f"[llm] start row {row_num}/{total_to_label} "
+            f"ticker={ticker} headline={headline[:80]!r}",
+            flush=True,
+        )
 
         try:
             prompt = build_prompt(row)
@@ -199,6 +209,13 @@ def process_rows(rows: List[Dict[str, str]], limit: Optional[int]) -> List[Dict[
                     file=sys.stderr,
                 )
                 printed_debug = True
+            print(
+                f"[llm] finished row {row_num}/{total_to_label} "
+                f"category={updated.get('category')} "
+                f"severity={updated.get('label_severity')} "
+                f"direction={updated.get('label_direction')}",
+                flush=True,
+            )
         except Exception as exc:
             if not printed_debug:
                 print({"error": str(exc)})
@@ -210,6 +227,10 @@ def process_rows(rows: List[Dict[str, str]], limit: Optional[int]) -> List[Dict[
             updated["label_time_horizon_2_min"] = updated.get("label_time_horizon_2_min", "")
             updated["label_confidence"] = updated.get("label_confidence", "")
             updated["label_needs_review"] = "true"
+            print(
+                f"[llm] failed row {row_num}/{total_to_label}: {exc}",
+                flush=True,
+            )
 
         processed.append(updated)
     return processed

@@ -1,76 +1,62 @@
 # ===================================================================
-# RSS Sources Configuration
-# Lists all RSS feeds the ingestion pipeline should pull from.
-# Each entry includes:
-#   - name: readable identifier
-#   - url: RSS feed link
-#   - category: business/markets/tech/etc.
-#   - credibility: high/medium/low (used for weighting & filtering)
+# GDELT Sources Configuration
+# The pipeline still reads this file through the existing rss_sources
+# key, but sources now use GDELT Doc API queries instead of RSS feeds.
+# Each GDELT source is converted into RSS-like raw entries so the
+# downstream normalize/clean/enrich/export stages can stay the same.
 # ===================================================================
 
 rss_sources:
 
-  # ---------------------------------------------------------------
-  # HIGH CREDIBILITY SOURCES
-  # ---------------------------------------------------------------
-
-
-  - name: ap_news_top
-    url: "https://apnews.com/rss"
-    category: general
-    credibility: high
-
-  - name: ap_news_business
-    url: "https://apnews.com/hub/business?utm_source=apnews.com&utm_medium=rss"
+  - name: gdelt_us_business
+    source_type: gdelt
+    query: '(business OR earnings OR revenue OR profit OR guidance OR layoffs) sourcecountry:US'
+    timespan: 7d
+    maxrecords: 50
+    sort: datedesc
+    sourcelang: english
     category: business
     credibility: high
 
-  - name: npr_top
-    url: "https://feeds.npr.org/1001/rss.xml"
-    category: general
+  - name: gdelt_us_markets
+    source_type: gdelt
+    query: '("stock market" OR stocks OR equities OR shares OR "Wall Street") sourcecountry:US'
+    timespan: 7d
+    maxrecords: 50
+    sort: datedesc
+    sourcelang: english
+    category: markets
     credibility: high
 
-  - name: npr_business
-    url: "https://feeds.npr.org/1006/rss.xml"
-    category: business
+  - name: gdelt_us_corporate_events
+    source_type: gdelt
+    query: '(merger OR acquisition OR lawsuit OR investigation OR bankruptcy OR downgrade OR upgrade) sourcecountry:US'
+    timespan: 7d
+    maxrecords: 50
+    sort: datedesc
+    sourcelang: english
+    category: corporate_events
     credibility: high
 
-  - name: abc_news_top
-    url: "https://abcnews.go.com/abcnews/topstories"
-    category: general
+  - name: gdelt_us_technology
+    source_type: gdelt
+    query: '(technology OR semiconductor OR software OR "artificial intelligence" OR cloud) sourcecountry:US'
+    timespan: 7d
+    maxrecords: 50
+    sort: datedesc
+    sourcelang: english
+    category: technology
     credibility: high
 
-  - name: cbs_news_top
-    url: "https://www.cbsnews.com/latest/rss/main"
-    category: general
-    credibility: high
-
-  - name: nbc_news_top
-    url: "https://feeds.nbcnews.com/nbcnews/public/news"
-    category: general
-    credibility: high
-
-
-  # ---------------------------------------------------------------
-  # LOWER CREDIBILITY SOURCES (SOCIAL SIGNALS)
-  # These are not traditional news sources.
-  # Treat them with caution — use mainly for sentiment or early signals.
-  # ---------------------------------------------------------------
-
-  #- name: reddit_wsb
-  #  url: "https://www.reddit.com/r/wallstreetbets/.rss"
-  #  category: social
-  #  credibility: low
-
-  #- name: reddit_investing
-  #  url: "https://www.reddit.com/r/investing/.rss"
-  #  category: social
-  #  credibility: low
-
-  # Twitter/X does not have a native RSS feed.
-  # This placeholder indicates future streaming integration.
-  #- name: twitter_finance_stream
-  #  url: "stream:twitter/finance"
-  #  category: social
-  #  credibility: low
-  #  note: "Not a real RSS URL — placeholder for future Twitter API ingestion."
+  # Optional company-watchlist mode, similar to scripts/gdelt/populate_unlabeled_data.py.
+  # This loops over config/company_tickers.csv and can make many API calls.
+  #
+  # - name: gdelt_company_watchlist
+  #   source_type: gdelt_company_watchlist
+  #   timespan: 7d
+  #   max_companies: 100
+  #   maxrecords_per_query: 5
+  #   sort: datedesc
+  #   sourcelang: english
+  #   category: company_watchlist
+  #   credibility: high
